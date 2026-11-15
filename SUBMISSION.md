@@ -42,11 +42,15 @@ cannot see what a contract does internally.
 
 ## Agent link (to fill in)
 Public repo: https://github.com/pikapuz/signguard (created 16 Nov 2026, commit 792052544531158700d5ee359bb4b13cfbb2d3d6, all 7 files verified byte-identical)
-Demo: <public endpoint URL — pending Render deploy>
+Demo: https://signguard-eight.vercel.app
 
 ## Public endpoint (to fill in)
-<https://… — Render deploy once user creates the web service from the repo; cloudflared quick tunnel
-does NOT work from this VM (egress proxy blocks cloudflared's TLS)>
+https://signguard-eight.vercel.app — Vercel Hobby deploy, verified live
+16 Nov 2026 ~05:53 WIB: GET / serves the demo UI (HTTP 200), POST
+/api/guard returns verdicts (unlimited USDC approve -> BLOCK 40).
+GET /api/health returns 404 on Vercel for unknown reasons (file is
+intact in the repo; the UI and guard API are unaffected — health is
+not used by the demo). Vercel auto-redeploys on every push to main.
 
 ## zkVerify (optional)
 Not used. SignGuard's claims are checkable a different way: every finding
