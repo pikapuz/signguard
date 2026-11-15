@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wildcard Guard — check a transaction before you sign it</title>
+<style>
+  :root {
+    --safe: #15803d; --safe-bg: #dcfce7;
+    --caution: #b45309; --caution-bg: #fef3c7;
+    --block: #b91c1c; --block-bg: #fee2e2;
+    --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f3f4f6; color: var(--ink); line-height: 1.5; }
+  header { background: #0f172a; color: #f8fafc; padding: 28px 20px; }
+  header .wrap, main .wrap { max-width: 860px; margin: 0 auto; }
+  header h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.5px; }
+  header p { margin: 0; color: #cbd5e1; max-width: 640px; }
+  main { padding: 20px 20px 40px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .card h2 { margin: 0 0 12px; font-size: 17px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin: 12px 0 4px; }
+  input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #2563eb; border-color: #2563eb; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 180px; }
+  .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .examples button, .btn { cursor: pointer; border: 1px solid #d1d5db; background: #f9fafb; border-radius: 999px; padding: 7px 14px; font-size: 13px; }
+  .examples button:hover { background: #eef2ff; border-color: #a5b4fc; }
+  .btn-primary { background: #0f172a; color: #fff; border: none; border-radius: 8px; padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 16px; }
+  .btn-primary:disabled { opacity: 0.6; cursor: wait; }
+  #result { display: none; }
+  .verdict { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .badge { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; padding: 8px 18px; border-radius: 999px; }
+  .badge.SAFE { background: var(--safe-bg); color: var(--safe); }
+  .badge.CAUTION { background: var(--caution-bg); color: var(--caution); }
+  .badge.BLOCK { background: var(--block-bg); color: var(--block); }
+  .scorebar { flex: 1; min-width: 160px; }
+  .scorebar .track { height: 10px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+  .scorebar .fill { height: 100%; border-radius: 999px; }
+  .scorebar .fill.SAFE { background: var(--safe); }
+  .scorebar .fill.CAUTION { background: var(--caution); }
+  .scorebar .fill.BLOCK { background: var(--block); }
+  .scorebar .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .summary { font-size: 16px; margin: 14px 0 4px; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .finding { border-left: 4px solid var(--line); padding: 10px 12px; margin: 10px 0; background: #f9fafb; border-radius: 0 8px 8px 0; }
+  .finding.critical { border-color: var(--block); background: #fef2f2; }
+  .finding.warn { border-color: var(--caution); background: #fffbeb; }
+  .finding.info { border-color: #2563eb; }
+  .finding .sev { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; }
+  .finding.critical .sev { color: var(--block); }
+  .finding.warn .sev { color: var(--caution); }
+  .finding.info .sev { color: #2563eb; }
+  .finding .title { font-weight: 700; margin: 2px 0; }
+  .finding .detail { font-size: 14px; color: #374151; }
+  details { margin-top: 14px; }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  pre { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; overflow-x: auto; font-size: 12px; }
+  .checks { columns: 2; font-size: 14px; color: #374151; }
+  .checks li { margin-bottom: 6px; }
+  .error { background: var(--block-bg); color: var(--block); padding: 12px; border-radius: 8px; font-weight: 600; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 8px 20px 30px; }
+  @media (max-width: 640px) { .checks { columns: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Wildcard Guard</h1>
+    <p>Screen an EVM transaction <strong>before</strong> you sign it. Paste the transaction, and the guard decodes the call, reads the target on-chain, and flags unlimited approvals, collection-wide NFT approvals, suspicious permits, proxies, and brand-new contracts.</p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="card">
+      <h2>Check a transaction</h2>
+      <div class="row">
+        <div>
+          <label for="chain">Chain</label>
+          <select id="chain">
+            <option value="1">Ethereum (1)</option>
+            <option value="8453">Base (8453)</option>
+            <option value="84532">Base Sepolia (84532)</option>
+            <option value="10">Optimism (10)</option>
+            <option value="42161">Arbitrum One (42161)</option>
+          </select>
+        </div>
+        <div>
+          <label for="value">Native value (ETH)</label>
+          <input id="value" value="0" inputmode="decimal">
+        </div>
+      </div>
+      <label for="to">To address</label>
+      <input id="to" class="mono" placeholder="0x...">
+      <label for="data">Calldata (hex)</label>
+      <textarea id="data" class="mono" rows="3" placeholder="0x — leave as 0x for a plain transfer"></textarea>
+      <label for="from">From address (optional)</label>
+      <input id="from" class="mono" placeholder="0x...">
+      <div class="examples">
+        <button type="button" data-example="safe">Safe transfer</button>
+        <button type="button" data-example="unlimited">Unlimited approval</button>
+        <button type="button" data-example="all">Approval for all NFTs</button>
+        <button type="button" data-example="suspicious">Suspicious unknown call</button>
+        <button type="button" data-example="permit">Permit, far-future deadline</button>
+      </div>
+      <button class="btn-primary" id="check">Check transaction</button>
+    </div>
+
+    <div class="card" id="result">
+      <div class="verdict">
+        <span class="badge" id="badge"></span>
+        <div class="scorebar">
+          <div class="track"><div class="fill" id="fill"></div></div>
+          <div class="label" id="scorelabel"></div>
+        </div>
+      </div>
+      <p class="summary" id="summary"></p>
+      <p class="meta" id="meta"></p>
+      <div id="findings"></div>
+      <details>
+        <summary>Raw JSON response</summary>
+        <pre id="raw"></pre>
+      </details>
+    </div>
+
+    <div class="card" id="errorcard" style="display:none">
+      <div class="error" id="errortext"></div>
+    </div>
+
+    <div class="card">
+      <h2>What the guard checks</h2>
+      <ul class="checks">
+        <li><strong>Unlimited allowance</strong> — approve() for type(uint256).max is the classic drain setup.</li>
+        <li><strong>Approval for all</strong> — setApprovalForAll(true) hands over a whole NFT collection.</li>
+        <li><strong>Permit abuse</strong> — permits with max value or deadlines years away.</li>
+        <li><strong>Hidden approvals</strong> — dangerous calls bundled inside multicall().</li>
+        <li><strong>Unknown functions</strong> — calldata the guard cannot decode is flagged, never trusted.</li>
+        <li><strong>Target type</strong> — EOA vs contract, via eth_getCode.</li>
+        <li><strong>Upgradeable proxies</strong> — EIP-1967 implementation and beacon slots.</li>
+        <li><strong>Contract age</strong> — contracts that did not exist ~30 days ago.</li>
+      </ul>
+      <p class="meta">Scoring is deterministic: every transaction starts at 100. A critical finding costs 60 points, a warning 15. Any critical finding blocks. SAFE is 80+, CAUTION 50–79, BLOCK below 50. The guard only performs read-only RPC calls — it never asks for a wallet connection and never signs anything.</p>
+    </div>
+
+    <div class="card">
+      <h2>API</h2>
+      <p class="meta">The same check is available as an HTTP API:</p>
+      <pre>POST /api/guard
+{ "chainId": 1, "to": "0x...", "value": "0", "data": "0x..." }
+
+-&gt; { "verdict": "BLOCK", "score": 40, "summary": "...",
+     "findings": [{ "severity": "critical", "title": "...", "detail": "..." }] }</pre>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Static and on-chain-read checks only — the guard cannot detect every scam. Not financial advice. Built for the Agent Games Wildcard track.
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function padAddress(addr) {
+  return "000000000000000000000000" + addr.slice(2).toLowerCase();
+}
+function padUint(n) {
+  return BigInt(n).toString(16).padStart(64, "0");
+}
+const MAX_UINT = "f".repeat(64);
+
+const EXAMPLES = {
+  safe: {
+    chain: "1",
+    to: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    value: "0.01",
+    data: "0x",
+    from: "",
+  },
+  unlimited: {
+    chain: "1",
+    to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+    value: "0",
+    data: "0x095ea7b3" + padAddress("0x1111111111111111111111111111111111111111") + MAX_UINT,
+    from: "",
+  },
+  all: {
+    chain: "1",
+    to: "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D", // BAYC
+    value: "0",
+    data: "0xa22cb465" + padAddress("0x2222222222222222222222222222222222222222") + padUint(1),
+    from: "",
+  },
+  suspicious: {
+    chain: "1",
+    to: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
+    value: "1",
+    data: "0x12345678",
+    from: "",
+  },
+  permit: {
+    chain: "1",
+    to: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+    value: "0",
+    data:
+      "0xd505accf" +
+      padAddress("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045") + // owner
+      padAddress("0x3333333333333333333333333333333333333333") + // spender
+      padUint(1000_000000n) + // 1000 USDC (6 decimals)
+      padUint(4102444800n) + // deadline: 2100-01-01
+      padUint(27) + // v
+      "0".repeat(64) + // r
+      "0".repeat(64), // s
+    from: "",
+  },
+};
+
+function ethToWei(ethStr) {
+  const s = (ethStr || "0").trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("value must be a non-negative number (ETH)");
+  const [whole, frac = ""] = s.split(".");
+  return (BigInt(whole) * 10n ** 18n + BigInt((frac + "0".repeat(18)).slice(0, 18))).toString();
+}
+
+function fillForm(ex) {
+  $("chain").value = ex.chain;
+  $("to").value = ex.to;
+  $("value").value = ex.value;
+  $("data").value = ex.data;
+  $("from").value = ex.from || "";
+}
+
+function showError(msg) {
+  $("errorcard").style.display = "block";
+  $("errortext").textContent = msg;
+  $("result").style.display = "none";
+}
+
+function render(result) {
+  $("errorcard").style.display = "none";
+  $("result").style.display = "block";
+  const badge = $("badge");
+  badge.textContent = result.verdict;
+  badge.className = "badge " + result.verdict;
+  const fill = $("fill");
+  fill.style.width = result.score + "%";
+  fill.className = "fill " + result.verdict;
+  $("scorelabel").textContent =
+    `Score ${result.score}/100 · ${result.chainName} · ${result.durationMs}ms · checks: ${result.checksRun.join(", ")}`;
+  $("summary").textContent = result.summary;
+  const t = result.target;
+  const targetBits = [`target: ${t.type}`];
+  if (t.proxy) targetBits.push(`proxy${t.implementation ? " → " + t.implementation : ""}`);
+  if (t.youngContract) targetBits.push("contract is under ~30 days old");
+  if (result.token && result.token.symbol) targetBits.push(`token: ${result.token.symbol}`);
+  if (result.function && result.function.name) targetBits.push(`function: ${result.function.name}`);
+  else if (result.function && result.function.selector) targetBits.push(`function: unknown ${result.function.selector}`);
+  $("meta").textContent = targetBits.join(" · ");
+  $("findings").innerHTML = result.findings
+    .map(
+      (f) =>
+        `<div class="finding ${f.severity}"><div class="sev">${f.severity}</div><div class="title"></div><div class="detail"></div></div>`
+    )
+    .join("");
+  // Fill text safely (no HTML injection from chain data).
+  [...$("findings").children].forEach((el, i) => {
+    el.querySelector(".title").textContent = result.findings[i].title;
+    el.querySelector(".detail").textContent = result.findings[i].detail;
+  });
+  $("raw").textContent = JSON.stringify(result, null, 2);
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function runCheck() {
+  const btn = $("check");
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    const body = {
+      chainId: Number($("chain").value),
+      to: $("to").value.trim(),
+      value: ethToWei($("value").value),
+      data: $("data").value.trim() || "0x",
+    };
+    const from = $("from").value.trim();
+    if (from) body.from = from;
+    const res = await fetch("/api/guard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      showError(json.error || `Request failed (${res.status})`);
+      return;
+    }
+    render(json);
+  } catch (err) {
+    showError(err.message || "Could not reach the guard server.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Check transaction";
+  }
+}
+
+$("check").addEventListener("click", runCheck);
+document.querySelectorAll("[data-example]").forEach((b) => {
+  b.addEventListener("click", () => {
+    fillForm(EXAMPLES[b.dataset.example]);
+    runCheck();
+  });
+});
+
+// Pre-fill the safe example so the page is useful immediately.
+fillForm(EXAMPLES.safe);
+</script>
+</body>
+</html>
