@@ -41,11 +41,11 @@ reads only — no execution simulation and no scam-address blocklist, so it
 cannot see what a contract does internally.
 
 ## Agent link (to fill in)
-Public repo: <GitHub repo URL — pending user's GitHub account>
-Demo: <public endpoint URL — pending deploy>
+Public repo: https://github.com/pikapuz/signguard (created 16 Nov 2026, commit 792052544531158700d5ee359bb4b13cfbb2d3d6, all 7 files verified byte-identical)
+Demo: <public endpoint URL — pending Render deploy>
 
 ## Public endpoint (to fill in)
-<https://… — Render deploy once GitHub exists; cloudflared quick tunnel
+<https://… — Render deploy once user creates the web service from the repo; cloudflared quick tunnel
 does NOT work from this VM (egress proxy blocks cloudflared's TLS)>
 
 ## zkVerify (optional)
